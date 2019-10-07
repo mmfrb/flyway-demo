@@ -3,12 +3,51 @@
  */
 package flyway.demo;
 
+import org.jdbi.v3.core.Jdbi;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 public class AppTest {
-    @Test public void testAppHasAGreeting() {
-        App classUnderTest = new App();
-        assertNotNull("app should have a greeting", classUnderTest.getGreeting());
-    }
+  private final String INSERT_QUERY = "INSERT INTO bank.BALANCE(user_id, balance) VALUES (?, ?)";
+
+  private final String MATEUS_USER = "mateus";
+  private final String RAFAEL_USER = "rafael";
+  private final Double INITIAL_AMOUNT = 1000.0;
+
+  private Jdbi jdbi;
+  private App app;
+
+  @Before
+  public void setUp() {
+    this.jdbi = JdbiFactory.create();
+    this.app = new App(this.jdbi);
+
+    this.jdbi.useHandle(
+        handle -> {
+          handle.execute(INSERT_QUERY, MATEUS_USER, INITIAL_AMOUNT);
+          handle.execute(INSERT_QUERY, RAFAEL_USER, INITIAL_AMOUNT);
+        });
+  }
+
+  @After
+  public void tearDown() {
+    this.jdbi.useHandle(handle -> handle.execute("DELETE FROM bank.BALANCE"));
+  }
+
+  @Test
+  public void testTransfer() {
+    this.app.transfer(MATEUS_USER, RAFAEL_USER, INITIAL_AMOUNT.intValue());
+
+    Double finalAmount =
+        this.jdbi.withHandle(
+            handle ->
+                handle
+                    .select("SELECT balance FROM bank.BALANCE WHERE user_id = ?", RAFAEL_USER)
+                    .mapTo(Double.class)
+                    .first());
+
+    assertEquals(INITIAL_AMOUNT * 2, finalAmount, 0.1);
+  }
 }
